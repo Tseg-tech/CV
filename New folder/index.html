@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quiz App</title>
+  <style>
+            @media (max-width: 600px) {
+        body {
+            padding: 10px;
+        }
+        #quiz {
+            padding: 15px;
+        }
+        .answers button {
+            font-size: 0.9em;
+            padding: 10px;
+        }
+        .question {
+            font-size: 1.1em;
+        }
+        }
+
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f9f9f9;
+      max-width: 700px;
+      margin: auto;
+    }
+    #quiz {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .question {
+      font-weight: bold;
+      font-size: 1.2em;
+      margin-bottom: 15px;
+    }
+    .answers button {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+      padding: 12px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      cursor: pointer;
+      background: #f0f0f0;
+      transition: background 0.3s;
+    }
+    .answers button:hover {
+      background: #e0e0e0;
+    }
+    #timer {
+      font-weight: bold;
+      color: #d9534f; /* bootstrap red */
+      margin-top: 10px;
+    }
+    #progress-container {
+      background: #ddd;
+      border-radius: 5px;
+      height: 20px;
+      margin: 20px 0;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #5cb85c; /* bootstrap green */
+      transition: width 0.4s ease;
+    }
+    #feedback {
+      margin-top: 15px;
+      font-weight: bold;
+      min-height: 24px;
+      font-size: 1.1em;
+    }
+    #score {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-top: 15px;
+    }
+    img.question-photo {
+      max-width: 100%;
+      margin-top: 15px;
+      border-radius: 5px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+
+<div id="quiz">
+<button id="restart-btn" style="display:none; margin-top:20px; padding:10px 20px; font-size:1em;">Restart Quiz</button>
+
+  <div id="question-container"></div>
+
+  <div id="timer">Time left: 60s</div>
+
+  <div id="progress-container">
+    <div id="progress-bar"></div>
+  </div>
+
+  <div id="feedback"></div>
+  <div id="score"></div>
+</div>
+
+<script>
+let questions = [];
+let currentQuestionIndex = 0;
+let timer = 60;
+let interval;
+let score = 0;
+
+async function loadQuestions() {
+  const res = await fetch('/api/questions');
+  questions = await res.json();
+  updateScore();
+  showQuestion();
+}
+
+function updateScore() {
+  document.getElementById('score').textContent = `Score: ${score} / ${questions.length}`;
+}
+
+function updateProgress() {
+  const percent = ((currentQuestionIndex) / questions.length) * 100;
+  document.getElementById('progress-bar').style.width = `${percent}%`;
+}
+
+function showQuestion() {
+  clearInterval(interval);
+  timer = 60;
+  document.getElementById('timer').textContent = `Time left: ${timer}s`;
+  document.getElementById('feedback').textContent = '';
+  updateProgress();
+
+  interval = setInterval(() => {
+    timer--;
+    document.getElementById('timer').textContent = `Time left: ${timer}s`;
+    if (timer <= 0) {
+      clearInterval(interval);
+      document.getElementById('feedback').textContent = '⏰ Time is up! Moving to next question.';
+      setTimeout(() => {
+        nextQuestion();
+      }, 1500);
+    }
+  }, 1000);
+
+  const questionObj = questions[currentQuestionIndex];
+  const container = document.getElementById('question-container');
+
+  if (!questionObj) {
+    container.innerHTML = `<h3>Quiz Finished!</h3><p>Your final score is <strong>${score} / ${questions.length}</strong>.</p>`;
+    document.getElementById('timer').style.display = 'none';
+    document.getElementById('progress-container').style.display = 'none';
+    document.getElementById('feedback').style.display = 'none';
+    return;
+  }
+
+  let html = `
+    <div class="question">${questionObj.Question_No}. ${questionObj.Question}</div>
+    <div class="answers">
+      <button onclick="selectAnswer(1)">${questionObj.Answer1}</button>
+      <button onclick="selectAnswer(2)">${questionObj.Answer2}</button>
+      <button onclick="selectAnswer(3)">${questionObj.Answer3}</button>
+      <button onclick="selectAnswer(4)">${questionObj.Answer4}</button>
+    </div>
+  `;
+
+  if (questionObj.photo) {
+    html += `<img src="${questionObj.photo}" alt="question image" class="question-photo">`;
+  }
+
+  container.innerHTML = html;
+}
+
+function selectAnswer(selectedNumber) {
+  const questionObj = questions[currentQuestionIndex];
+  const correctAnswerNumber = parseInt(questionObj.Correct_Answer, 10);
+
+  if (selectedNumber === correctAnswerNumber) {
+    document.getElementById('feedback').textContent = '✅ Correct answer!';
+    score++;
+    updateScore();
+    clearInterval(interval);
+    setTimeout(() => {
+      nextQuestion();
+    }, 1200);
+  } else {
+    document.getElementById('feedback').textContent = '❌ Try again.';
+  }
+}
+
+function nextQuestion() {
+  currentQuestionIndex++;
+  showQuestion();
+}
+
+loadQuestions();
+
+
+const restartBtn = document.getElementById('restart-btn');
+
+restartBtn.addEventListener('click', () => {
+  currentQuestionIndex = 0;
+  score = 0;
+  restartBtn.style.display = 'none';
+  document.getElementById('timer').style.display = 'block';
+  document.getElementById('progress-container').style.display = 'block';
+  document.getElementById('feedback').style.display = 'block';
+  updateScore();
+  showQuestion();
+});
+
+async function saveResult() {
+  try {
+    await fetch('/api/save-result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score, total: questions.length }),
+    });
+    console.log('Result saved!');
+  } catch (err) {
+    console.error('Failed to save result', err);
+  }
+}
+
+function showQuestion() {
+  clearInterval(interval);
+  timer = 60;
+  chancesLeft = 2;  // reset chances for each question
+  document.getElementById('timer').textContent = `Time left: ${timer}s`;
+  document.getElementById('feedback').textContent = '';
+  updateProgress();
+
+  interval = setInterval(() => {
+    timer--;
+    document.getElementById('timer').textContent = `Time left: ${timer}s`;
+    if (timer <= 0) {
+      clearInterval(interval);
+      document.getElementById('feedback').textContent = '⏰ Time is up! Moving to next question.';
+      setTimeout(() => {
+        nextQuestion();
+      }, 1500);
+    }
+  }, 1000);
+
+  const questionObj = questions[currentQuestionIndex];
+  const container = document.getElementById('question-container');
+
+  if (!questionObj) {
+    container.innerHTML = `<h3>Quiz Finished!</h3>
+      <p>Your final score is <strong>${score} / ${questions.length}</strong>.</p>`;
+    document.getElementById('timer').style.display = 'none';
+    document.getElementById('progress-container').style.display = 'none';
+    document.getElementById('feedback').style.display = 'none';
+
+    restartBtn.style.display = 'inline-block';
+
+    // Save the result on quiz end
+    saveResult();
+
+    return;
+  }
+
+  let html = `
+    <div class="question">${questionObj.Question_No}. ${questionObj.Question}</div>
+    <div class="answers">
+      <button onclick="selectAnswer(1)">${questionObj.Answer1}</button>
+      <button onclick="selectAnswer(2)">${questionObj.Answer2}</button>
+      <button onclick="selectAnswer(3)">${questionObj.Answer3}</button>
+      <button onclick="selectAnswer(4)">${questionObj.Answer4}</button>
+    </div>
+  `;
+
+  if (questionObj.photo) {
+    html += `<img src="${questionObj.photo}" alt="question image" class="question-photo">`;
+  }
+
+  container.innerHTML = html;
+}
+
+// New variable to track chances left per question
+let chancesLeft = 2;
+
+function selectAnswer(selectedNumber) {
+  const questionObj = questions[currentQuestionIndex];
+  const correctAnswerNumber = parseInt(questionObj.Correct_Answer, 10);
+
+  if (selectedNumber === correctAnswerNumber) {
+    document.getElementById('feedback').textContent = '✅ Correct answer!';
+    score++;
+    updateScore();
+    clearInterval(interval);
+    setTimeout(() => {
+      nextQuestion();
+    }, 1200);
+  } else {
+    chancesLeft--;
+    if (chancesLeft > 0) {
+      document.getElementById('feedback').textContent = `❌ Try again. Chances left: ${chancesLeft}`;
+    } else {
+      document.getElementById('feedback').textContent = '❌ No chances left. Moving to next question.';
+      clearInterval(interval);
+      setTimeout(() => {
+        nextQuestion();
+      }, 1200);
+    }
+  }
+}
+
+</script>
+
+</body>
+</html>
